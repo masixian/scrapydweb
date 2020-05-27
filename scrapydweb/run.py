@@ -11,7 +11,7 @@ from flask import request
 from scrapydweb import create_app
 from scrapydweb.__version__ import __description__, __version__
 from scrapydweb.common import authenticate, find_scrapydweb_settings_py, handle_metadata, handle_slash
-from scrapydweb.vars import SCHEDULER_STATE_DICT, STATE_PAUSED, STATE_RUNNING
+from scrapydweb.vars import ROOT_DIR, SCRAPYDWEB_SETTINGS_PY, SCHEDULER_STATE_DICT, STATE_PAUSED, STATE_RUNNING
 from scrapydweb.utils.check_app_config import check_app_config
 
 
@@ -19,9 +19,7 @@ logger = logging.getLogger(__name__)
 apscheduler_logger = logging.getLogger('apscheduler')
 
 STAR = '\n%s\n' % ('*' * 100)
-CWD = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_SETTINGS_PY_PATH = os.path.join(CWD, 'default_settings.py')
-SCRAPYDWEB_SETTINGS_PY = 'scrapydweb_settings_v8.py'
+DEFAULT_SETTINGS_PY_PATH = os.path.join(ROOT_DIR, 'default_settings.py')
 
 
 def main():
@@ -45,7 +43,7 @@ def main():
         check_app_config(app.config)
     except AssertionError as err:
         logger.error("Check app config fail: ")
-        sys.exit(u"\n{err}\nCheck and update your settings in {path}\n".format(
+        sys.exit(u"\n{err}\n\nCheck and update your settings in {path}\n".format(
                  err=err, path=handle_slash(app.config['SCRAPYDWEB_SETTINGS_PY_PATH'])))
 
     # https://stackoverflow.com/questions/34164464/flask-decorate-every-route-at-once
@@ -69,11 +67,14 @@ def main():
 
     @app.context_processor
     def inject_variable():
+        SCRAPYD_SERVERS = app.config.get('SCRAPYD_SERVERS', []) or ['127.0.0.1:6800']
+        SCRAPYD_SERVERS_PUBLIC_URLS = app.config.get('SCRAPYD_SERVERS_PUBLIC_URLS', None)
         return dict(
-            SCRAPYD_SERVERS=app.config.get('SCRAPYD_SERVERS', []) or ['127.0.0.1:6800'],
-            SCRAPYD_SERVERS_AMOUNT=len(app.config.get('SCRAPYD_SERVERS', []) or ['127.0.0.1:6800']),
+            SCRAPYD_SERVERS=SCRAPYD_SERVERS,
+            SCRAPYD_SERVERS_AMOUNT=len(SCRAPYD_SERVERS),
             SCRAPYD_SERVERS_GROUPS=app.config.get('SCRAPYD_SERVERS_GROUPS', []) or [''],
             SCRAPYD_SERVERS_AUTHS=app.config.get('SCRAPYD_SERVERS_AUTHS', []) or [None],
+            SCRAPYD_SERVERS_PUBLIC_URLS=SCRAPYD_SERVERS_PUBLIC_URLS or [''] * len(SCRAPYD_SERVERS),
 
             DAEMONSTATUS_REFRESH_INTERVAL=app.config.get('DAEMONSTATUS_REFRESH_INTERVAL', 10),
             ENABLE_AUTH=app.config.get('ENABLE_AUTH', False),
@@ -135,7 +136,9 @@ def load_custom_settings(config):
                      "Then add your SCRAPYD_SERVERS in the config file and restart scrapydweb.\n".format(
                       file=SCRAPYDWEB_SETTINGS_PY))
         else:
-            sys.exit("\nThe config file '{file}' has been copied to current working directory.\n"
+            sys.exit("\nATTENTION:\nYou may encounter ERROR if there are any running timer tasks added in v1.2.0,\n"
+                     "and you have to restart scrapydweb and manually edit the tasks to resume them.\n"
+                     "\nThe config file '{file}' has been copied to current working directory.\n"
                      "Please add your SCRAPYD_SERVERS in the config file and restart scrapydweb.\n".format(
                       file=SCRAPYDWEB_SETTINGS_PY))
 
@@ -173,7 +176,7 @@ def parse_args(config):
         help="current: ENABLE_AUTH = %s, append '--disable_auth' to disable basic auth for web UI" % ENABLE_AUTH
     )
 
-    ENABLE_LOGPARSER = config.get('ENABLE_LOGPARSER', True)
+    ENABLE_LOGPARSER = config.get('ENABLE_LOGPARSER', False)
     parser.add_argument(
         '-dlp', '--disable_logparser',
         action='store_true',
@@ -189,11 +192,11 @@ def parse_args(config):
               "for timer tasks") % SCHEDULER_STATE
     )
 
-    ENABLE_EMAIL = config.get('ENABLE_EMAIL', False)
+    ENABLE_MONITOR = config.get('ENABLE_MONITOR', False)
     parser.add_argument(
-        '-de', '--disable_email',
+        '-dm', '--disable_monitor',
         action='store_true',
-        help="current: ENABLE_EMAIL = %s, append '--disable_email' to disable email notice" % ENABLE_EMAIL
+        help="current: ENABLE_MONITOR = %s, append '--disable_monitor' to disable monitor" % ENABLE_MONITOR
     )
 
     DEBUG = config.get('DEBUG', False)
@@ -237,8 +240,8 @@ def update_app_config(config, args):
             handle_metadata('scheduler_state', STATE_PAUSED)
         else:
             handle_metadata('scheduler_state', STATE_RUNNING)
-    if args.disable_email:
-        config['ENABLE_EMAIL'] = False
+    if args.disable_monitor:
+        config['ENABLE_MONITOR'] = False
     if args.debug:
         config['DEBUG'] = True
     if args.verbose:

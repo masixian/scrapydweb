@@ -1,6 +1,7 @@
 # coding: utf-8
 from functools import partial
 from io import BytesIO
+import os
 import re
 
 from tests.utils import cst, req, switch_scrapyd, upload_file_deploy
@@ -15,14 +16,16 @@ def test_deploy_from_post(app, client):
 def test_auto_packaging_select_option(app, client):
     ins = [
         '(14 projects)',
-        u"var folders = ['ScrapydWeb_demo', 'demo - 副本', 'demo',",
-        "var projects = ['ScrapydWeb_demo', 'demo-copy', 'demo',",
+        u"var folders = ['demo - 副本', 'demo',",
+        "var projects = ['demo-copy', 'demo',",
         '<div>%s<' % cst.PROJECT,
         u'<div>demo - 副本<',
         '<div>demo<',
         '<div>demo_only_scrapy_cfg<'
     ]
-    nos = ['<div>demo_without_scrapy_cfg<', '<h3>NO projects found']
+    nos = ['<div>demo_without_scrapy_cfg<']
+    if not os.environ.get('DATA_PATH', ''):
+        nos.append('<h3>No projects found')
     req(app, client, view='deploy', kws=dict(node=2), ins=ins, nos=nos)
 
 

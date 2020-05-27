@@ -97,7 +97,8 @@ def test_edit_task(app, client):
     task_id = metadata['task_id']
     # http://127.0.0.1:5000/1/schedule/?task_id=1
     req(app, client, view='schedule', kws=dict(node=NODE, task_id=task_id),
-        ins=["checked />%s" % app.config['SCRAPYD_SERVERS'][0], "checked />%s" % app.config['SCRAPYD_SERVERS'][-1]])
+        ins=["checked />[1] %s" % app.config['SCRAPYD_SERVERS'][0],
+             "checked />[2] %s" % app.config['SCRAPYD_SERVERS'][-1]])
 
     check_data_ = dict(check_data)
     check_data_.update(task_id=task_id, hour='6')
@@ -132,8 +133,8 @@ def test_edit_task(app, client):
     assert '06:00:00' in js['data']['apscheduler_job']['next_run_time']
 
     req(app, client, view='schedule', kws=dict(node=NODE, task_id=task_id),
-        ins="checked />%s" % app.config['SCRAPYD_SERVERS'][0],
-        nos="checked />%s" % app.config['SCRAPYD_SERVERS'][-1])
+        ins="checked />[1] %s" % app.config['SCRAPYD_SERVERS'][0],
+        nos="checked />[2] %s" % app.config['SCRAPYD_SERVERS'][-1])
 
 
 # ['selected_nodes'] == [1] in test_edit_task() above
@@ -303,7 +304,7 @@ def test_execute_task_exception(app, client):
     # in the task results page: url_action: '/1/tasks/xhr/delete/5/10/',
     task_result_id = int(re.search(r'%s(\d+)/' % url_delete, text).group(1))
     print("task_result_id: %s" % task_result_id)
-    # In myview.py: assert 0 < self.node <= self.SCRAPYD_SERVERS_AMOUNT
+    # In baseview.py: assert 0 < self.node <= self.SCRAPYD_SERVERS_AMOUNT
     # Note that AssertionError would be raise directly in test, whereas internal_server_error() would return 500.html
     # instead when the app is actually running, getting '500 error node index error: 2, which should be between 1 and 1'
     req(app, client, view='tasks', kws=dict(node=1, task_id=task_id, task_result_id=task_result_id),

@@ -35,6 +35,7 @@ JOB_PATTERN = re.compile(r"""
                                 (?:<td>(?P<Finish>.*?)</td>)?
                                 (?:<td>(?P<Log>.*?)</td>)?
                                 (?:<td>(?P<Items>.*?)</td>)?
+                                [\w\W]*?  # Temp support for Scrapyd v1.3.0 (not released)
                             </tr>
                           """, re.X)
 JOB_KEYS = ['project', 'spider', 'job', 'pid', 'start', 'runtime', 'finish', 'log', 'items']
@@ -72,7 +73,7 @@ class Poll(object):
         if verbose:
             self.logger.setLevel(logging.DEBUG)
         else:
-            self.logger.setLevel(logging.WARNING)
+            self.logger.setLevel(logging.INFO)
         self.exit_timeout = exit_timeout
 
         self.init_time = time.time()
@@ -105,15 +106,17 @@ class Poll(object):
         assert r is not None, "[node %s] fetch_jobs failed: %s" % (node, url)
 
         self.logger.debug("[node %s] fetch_jobs got (%s) %s bytes", node, r.status_code, len(r.content))
-        jobs = [dict(zip(JOB_KEYS, job)) for job in re.findall(JOB_PATTERN, r.text)]
+        # Temp support for Scrapyd v1.3.0 (not released)
+        text = re.sub(r'<thead>.*?</thead>', '', r.text, flags=re.S)
+        jobs = [dict(zip(JOB_KEYS, job)) for job in re.findall(JOB_PATTERN, text)]
         for job in jobs:
             job_tuple = (job['project'], job['spider'], job['job'])
             if job['pid']:
                 running_jobs.append(job_tuple)
             elif job['finish']:
                 finished_jobs_set.add(job_tuple)
-        self.logger.info("[node %s] got running_jobs: %s", node, len(running_jobs))
-        self.logger.info("[node %s] got finished_jobs_set: %s", node, len(finished_jobs_set))
+        self.logger.debug("[node %s] got running_jobs: %s", node, len(running_jobs))
+        self.logger.debug("[node %s] got finished_jobs_set: %s", node, len(finished_jobs_set))
         return running_jobs, finished_jobs_set
 
     def fetch_stats(self, node, job_tuple, finished_jobs):
@@ -130,13 +133,13 @@ class Poll(object):
         # http://127.0.0.1:5000/log/stats/proxy/test/55f1f388a7ae11e8b9b114dda9e91c2f/
         url = self.url_stats.format(**kwargs)
         self.logger.debug("[node %s] fetch_stats: %s", node, url)
-        # Make POST request to trigger email notice, see log.py
+        # Make POST request to trigger alert, see log.py
         r = self.make_request(url, auth=self.auth, post=True)
         if r is None:
             self.logger.error("[node %s %s] fetch_stats failed: %s", node, self.scrapyd_servers[node-1], url)
             if job_finished:
                 self.finished_jobs_dict[node].remove(job_tuple)
-                self.logger.warning("[node %s] retry in next round: %s", node, url)
+                self.logger.info("[node %s] retry in next round: %s", node, url)
         else:
             self.logger.debug("[node %s] fetch_stats got (%s) %s bytes from %s",
                               node, r.status_code, len(r.content), url)
@@ -153,7 +156,7 @@ class Poll(object):
                     self.logger.critical("GoodBye, exit_timeout: %s", self.exit_timeout)
                     break
                 else:
-                    self.logger.warning("Sleep %s seconds", self.poll_round_interval)
+                    self.logger.info("Sleeping for %ss", self.poll_round_interval)
                     time.sleep(self.poll_round_interval)
             except KeyboardInterrupt:
                 self.logger.warning("Poll subprocess (pid: %s) cancelled by KeyboardInterrupt", self.poll_pid)
@@ -167,6 +170,7 @@ class Poll(object):
                 r = self.session.post(url, auth=auth, timeout=self.timeout)
             else:
                 r = self.session.get(url, auth=auth, timeout=self.timeout)
+            r.encoding = 'utf-8'
             assert r.status_code == 200, "got status_code %s" % r.status_code
         except Exception as err:
             self.logger.error("make_request failed: %s\n%s", url, err)
@@ -188,7 +192,7 @@ class Poll(object):
                 finished_jobs = self.update_finished_jobs(node, finished_jobs_set)
                 for job_tuple in running_jobs + finished_jobs:
                     self.fetch_stats(node, job_tuple, finished_jobs)
-                    self.logger.debug("Sleep %s seconds", self.poll_request_interval)
+                    self.logger.debug("Sleeping for %ss", self.poll_request_interval)
                     time.sleep(self.poll_request_interval)
             except KeyboardInterrupt:
                 raise
@@ -199,21 +203,21 @@ class Poll(object):
 
     def update_finished_jobs(self, node, finished_jobs_set):
         finished_jobs_set_previous = self.finished_jobs_dict.setdefault(node, set())
-        self.logger.info("[node %s] previous finished_jobs_set: %s", node, len(finished_jobs_set_previous))
+        self.logger.debug("[node %s] previous finished_jobs_set: %s", node, len(finished_jobs_set_previous))
         # set([2,3]).difference(set([1,2])) => {3}
         finished_jobs_set_new_added = finished_jobs_set.difference(finished_jobs_set_previous)
         self.finished_jobs_dict[node] = finished_jobs_set
-        self.logger.info("[node %s] now finished_jobs_set: %s", node, len(self.finished_jobs_dict[node]))
+        self.logger.debug("[node %s] now finished_jobs_set: %s", node, len(self.finished_jobs_dict[node]))
         if finished_jobs_set_new_added:
-            self.logger.warning("[node %s] new added finished_jobs_set: %s", node, finished_jobs_set_new_added)
-        else:
             self.logger.info("[node %s] new added finished_jobs_set: %s", node, finished_jobs_set_new_added)
+        else:
+            self.logger.debug("[node %s] new added finished_jobs_set: %s", node, finished_jobs_set_new_added)
 
         finished_jobs = []
         ignore = self.ignore_finished_bool_list[node-1]
         for job_tuple in finished_jobs_set_new_added:
             if ignore:
-                self.logger.warning("[node %s] ignore finished job: %s", node, job_tuple)
+                self.logger.debug("[node %s] ignore finished job: %s", node, job_tuple)
             else:
                 finished_jobs.append(job_tuple)
         if ignore:

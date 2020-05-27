@@ -13,37 +13,38 @@ from tests.utils import cst, req_single_scrapyd, set_single_scrapyd, upload_file
 def test_auto_packaging_select_option(app, client):
     ins = [
         '(14 projects)',
-        u"var folders = ['ScrapydWeb_demo', 'demo - 副本', 'demo',",
-        "var projects = ['ScrapydWeb_demo', 'demo-copy', 'demo',",
+        u"var folders = ['demo - 副本', 'demo',",
+        "var projects = ['demo-copy', 'demo',",
         '<div>%s<' % cst.PROJECT,
         u'<div>demo - 副本<',
         '<div>demo<',
         '<div>demo_only_scrapy_cfg<'
     ]
-    nos = ['<div>demo_without_scrapy_cfg<', '<h3>NO projects found']
+    nos = ['<div>demo_without_scrapy_cfg<', '<h3>No projects found']
     req_single_scrapyd(app, client, view='deploy', kws=dict(node=1), ins=ins, nos=nos)
 
     for project in [cst.PROJECT, 'demo']:
-        with io.open(os.path.join(cst.CWD, 'data/%s/test' % project), 'w', encoding='utf-8') as f:
+        with io.open(os.path.join(cst.ROOT_DIR, 'data/%s/test' % project), 'w', encoding='utf-8') as f:
             f.write(u'')
         ins = ['id="folder_selected" value="%s"' % project, 'id="folder_selected_statement">%s<' % project]
         req_single_scrapyd(app, client, view='deploy', kws=dict(node=1), ins=ins)
 
-    with io.open(os.path.join(cst.CWD, 'data/demo/test'), 'w', encoding='utf-8') as f:
+    with io.open(os.path.join(cst.ROOT_DIR, 'data/demo/test'), 'w', encoding='utf-8') as f:
         f.write(u'')
 
-    # SCRAPY_PROJECTS_DIR=os.path.join(cst.CWD, 'data'),
-    app.config['SCRAPY_PROJECTS_DIR'] = os.path.join(cst.CWD, 'not-exist')
+    # SCRAPY_PROJECTS_DIR=os.path.join(cst.ROOT_DIR, 'data'),
+    app.config['SCRAPY_PROJECTS_DIR'] = os.path.join(cst.ROOT_DIR, 'not-exist')
     req_single_scrapyd(app, client, view='deploy', kws=dict(node=1),
                        ins=['(0 projects)', '<h3>No projects found'])
 
-    app.config['SCRAPY_PROJECTS_DIR'] = os.path.join(cst.CWD, 'data', 'one_project_inside')
+    app.config['SCRAPY_PROJECTS_DIR'] = os.path.join(cst.ROOT_DIR, 'data', 'one_project_inside')
     req_single_scrapyd(app, client, view='deploy', kws=dict(node=1),
-                       ins='(1 project)', nos='<h3>NO projects found')
+                       ins='(1 project)', nos='<h3>No projects found')
 
-    app.config['SCRAPY_PROJECTS_DIR'] = ''
-    req_single_scrapyd(app, client, view='deploy', kws=dict(node=1),
-                       ins=DEMO_PROJECTS_PATH.replace('\\', '/'), nos='<h3>NO projects found')
+    if not os.environ.get('DATA_PATH', ''):
+        app.config['SCRAPY_PROJECTS_DIR'] = ''
+        req_single_scrapyd(app, client, view='deploy', kws=dict(node=1),
+                           ins=DEMO_PROJECTS_PATH.replace('\\', '/'), nos='<h3>No projects found')
 
 
 # {'status': 'error', 'message': 'Traceback

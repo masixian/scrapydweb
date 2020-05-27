@@ -53,9 +53,10 @@ def test_page(app, client):
     for view, title in cst.VIEW_TITLE_MAP.items():
         req(app, client, view=view, kws=dict(node=1), ins=title)
 
-    req(app, client, view='jobs', kws=dict(node=2), ins='status_code: -1')
-    req(app, client, view='items', kws=dict(node=2), ins='status_code: -1')
-    req(app, client, view='logs', kws=dict(node=2), ins='status_code: -1')
+    # When v*p*n is globally enabled for testing Telegram, got 500 Internal Privoxy Error
+    ins = ['fail - ScrapydWeb', 'status_code: -1']
+    for view in ['jobs', 'logs', 'items']:
+        req(app, client, view=view, kws=dict(node=2), ins=ins)
 
     switch_scrapyd(app)
 
@@ -80,3 +81,10 @@ def test_switch_node_skip(app, client):
         ins=['1 / 2', 'onclick="switchNode(1);', 'id="skip_nodes_checkbox"'])
     req(app, client, view='servers', kws=dict(node=2),
         ins=['2 / 2', 'onclick="switchNode(-1);', 'id="skip_nodes_checkbox"'])
+
+
+# <span>Cluster Reports</span>
+# <el-tab-pane label="Get Reports" name="getreports">
+def test_cluster_reports_exists(app, client):
+    ins = ['<span>Cluster Reports</span>', '<el-tab-pane label="Get Reports"']
+    req(app, client, view='servers', kws=dict(node=1), ins=ins)
